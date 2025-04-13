@@ -1,157 +1,134 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Schedule Admin</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <style>
-    .schedule-cell {
-      min-height: 60px;
-      border: 1px solid #e5e7eb;
-      padding: 4px;
-      font-size: 0.75rem;
-      cursor: pointer;
-    }
-    .shift-box {
-      border-radius: 0.25rem;
-      padding: 4px;
-      color: white;
-      font-weight: 500;
-      width: 100%;
-      height: 100%;
-      display: inline-block;
-    }
-  </style>
-</head>
-<body class="bg-gray-50 p-4">
-  <div class="mb-4 flex items-center gap-2">
-    <button onclick="changeWeek(-1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">◀ Prev</button>
-    <button onclick="goToCurrentWeek()" class="bg-blue-300 hover:bg-blue-400 text-sm px-4 py-1 rounded">This Week</button>
-    <button onclick="changeWeek(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">Next ▶</button>
-    <button onclick="setWeekView(1)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded ml-auto">1W</button>
-    <button onclick="setWeekView(2)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded">2W</button>
-  </div>
+// schedule-app-admin (React + Firestore)
+// Firebase config will be connected to the app
 
-  <div class="overflow-x-auto">
-    <table class="table-auto w-full text-sm text-left border border-gray-300">
-      <thead class="bg-gray-100" id="table-head"></thead>
-      <tbody id="schedule-body"></tbody>
-    </table>
-  </div>
+import React, { useEffect, useState } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  where,
+} from "firebase/firestore";
+import { format, startOfWeek, addDays, addWeeks, subWeeks } from "date-fns";
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
+  authDomain: "teamscheduler-a353e.firebaseapp.com",
+  projectId: "teamscheduler-a353e",
+  storageBucket: "teamscheduler-a353e.firebasestorage.app",
+  messagingSenderId: "531731392510",
+  appId: "1:531731392510:web:644e38aeab3e9f505942af",
+  measurementId: "G-EZ342B3QHH",
+};
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
-      authDomain: "teamscheduler-a353e.firebaseapp.com",
-      projectId: "teamscheduler-a353e",
-      storageBucket: "teamscheduler-a353e.appspot.com",
-      messagingSenderId: "531731392510",
-      appId: "1:531731392510:web:644e38aeab3e9f505942af",
-      measurementId: "G-EZ342B3QHH"
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const colors = [
+  "#FFB6C1", // light pink
+  "#87CEFA", // light sky blue
+  "#90EE90", // light green
+  "#FFD700", // gold
+  "#FFA07A", // light salmon
+  "#9370DB", // medium purple
+  "#00CED1", // dark turquoise
+  "#F4A460", // sandy brown
+  "#D3D3D3", // light gray
+  "#FF69B4", // hot pink
+];
+
+const getWeekDays = (start) => {
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+};
+
+export default function ScheduleApp() {
+  const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [days, setDays] = useState(getWeekDays(currentWeekStart));
+  const [shifts, setShifts] = useState([]);
+
+  useEffect(() => {
+    setDays(getWeekDays(currentWeekStart));
+    fetchShifts();
+  }, [currentWeekStart]);
+
+  const fetchShifts = async () => {
+    const startDate = format(currentWeekStart, "yyyy-MM-dd");
+    const endDate = format(addDays(currentWeekStart, 6), "yyyy-MM-dd");
+    const q = query(
+      collection(db, "shifts"),
+      where("date", ">=", startDate),
+      where("date", "<=", endDate)
+    );
+    const querySnapshot = await getDocs(q);
+    const shiftData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    setShifts(shiftData);
+  };
+
+  const handleAddShift = async (day) => {
+    const title = prompt("Shift Title:");
+    const time = prompt("Shift Time:");
+    const color = prompt("Color (or 'vacation' for default vacation color):");
+    if (!title || !time) return;
+
+    const newShift = {
+      title,
+      time,
+      color: color === "vacation" ? "#A9A9A9" : color,
+      date: format(day, "yyyy-MM-dd"),
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    await addDoc(collection(db, "shifts"), newShift);
+    fetchShifts();
+  };
 
-    let currentWeek = getWeekNumber(new Date());
-    const baseWeek = currentWeek;
-    let weekView = 1;
+  const handleDeleteShift = async (id) => {
+    await deleteDoc(doc(db, "shifts", id));
+    fetchShifts();
+  };
 
-    const employees = ["Anna", "Daniel", "Lena", "Tom"];
-    const schedule = employees.map(name => ({ name, shifts: {} }));
+  const nextWeek = () => setCurrentWeekStart((prev) => addWeeks(prev, 1));
+  const prevWeek = () => setCurrentWeekStart((prev) => subWeeks(prev, 1));
 
-    function getWeekNumber(date) {
-      const firstJan = new Date(date.getFullYear(), 0, 1);
-      const pastDays = Math.floor((date - firstJan) / 86400000);
-      return Math.ceil((pastDays + firstJan.getDay() + 1) / 7);
-    }
-
-    function getDates(week, view) {
-      const year = new Date().getFullYear();
-      const base = new Date(year, 0, (week - 1) * 7);
-      const dates = [];
-      for (let w = 0; w < view; w++) {
-        for (let d = 1; d <= 7; d++) {
-          const date = new Date(base);
-          date.setDate(base.getDate() + w * 7 + d - 1);
-          dates.push(`W${week + w}-D${d}`);
-        }
-      }
-      return dates;
-    }
-
-    function renderHead(dates) {
-      const row = document.createElement("tr");
-      row.innerHTML = `<th class='p-2 border'>Name</th>` +
-        dates.map(d => `<th class='p-2 border'>${d}</th>`).join("");
-      document.getElementById("table-head").innerHTML = "";
-      document.getElementById("table-head").appendChild(row);
-    }
-
-    function renderBody(dates) {
-      const keys = dates;
-      const body = document.getElementById("schedule-body");
-      body.innerHTML = "";
-      schedule.forEach((emp, row) => {
-        const tr = document.createElement("tr");
-        const nameTd = document.createElement("td");
-        nameTd.className = "p-2 border font-medium";
-        nameTd.textContent = emp.name;
-        tr.appendChild(nameTd);
-        keys.forEach(key => {
-          const td = document.createElement("td");
-          td.className = "schedule-cell";
-          td.dataset.row = row;
-          td.dataset.day = key;
-          const shift = emp.shifts[key];
-          if (shift) {
-            td.innerHTML = `<div class='shift-box' style='background-color:${shift.color}'>${shift.label}<br>${shift.time}</div>`;
-          }
-          tr.appendChild(td);
-        });
-        body.appendChild(tr);
-      });
-    }
-
-    async function loadShifts() {
-      const snapshot = await getDocs(collection(db, "shifts"));
-      schedule.forEach(e => e.shifts = {});
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const emp = schedule.find(e => e.name === data.name);
-        if (emp && data.week >= currentWeek && data.week < currentWeek + weekView) {
-          emp.shifts[data.day] = {
-            label: data.label,
-            time: data.time,
-            color: data.color
-          };
-        }
-      });
-      const dates = getDates(currentWeek, weekView);
-      renderHead(dates);
-      renderBody(dates);
-    }
-
-    function changeWeek(offset) {
-      currentWeek += offset;
-      loadShifts();
-    }
-
-    function goToCurrentWeek() {
-      currentWeek = baseWeek;
-      loadShifts();
-    }
-
-    function setWeekView(view) {
-      weekView = view;
-      loadShifts();
-    }
-
-    loadShifts();
-  </script>
-</body>
-</html>
+  return (
+    <div className="p-6">
+      <div className="flex justify-between mb-4">
+        <button onClick={prevWeek} className="bg-gray-300 px-4 py-2 rounded">Previous Week</button>
+        <h1 className="text-xl font-bold">Week of {format(currentWeekStart, "dd MMM yyyy")}</h1>
+        <button onClick={nextWeek} className="bg-gray-300 px-4 py-2 rounded">Next Week</button>
+      </div>
+      <div className="grid grid-cols-7 gap-2">
+        {days.map((day) => (
+          <div key={day} className="border p-2 rounded shadow">
+            <div className="font-semibold mb-2">{format(day, "EEEE dd/MM")}</div>
+            <div className="flex flex-col gap-2">
+              {shifts
+                .filter((s) => s.date === format(day, "yyyy-MM-dd"))
+                .map((shift) => (
+                  <div
+                    key={shift.id}
+                    className="p-2 rounded text-white cursor-pointer"
+                    style={{ backgroundColor: shift.color }}
+                    onClick={() => handleDeleteShift(shift.id)}
+                    title="Click to delete shift"
+                  >
+                    <strong>{shift.title}</strong><br />{shift.time}
+                  </div>
+                ))}
+              <button
+                onClick={() => handleAddShift(day)}
+                className="text-sm mt-1 bg-blue-500 text-white rounded px-2 py-1"
+              >
+                + Add Shift
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
