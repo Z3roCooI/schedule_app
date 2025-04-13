@@ -31,6 +31,7 @@
     <button onclick="changeWeek(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">Next Week ▶</button>
     <button onclick="setWeekView(1)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded ml-auto">1 Week View</button>
     <button onclick="setWeekView(2)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded">2 Week View</button>
+    <button onclick="window.print()" class="bg-yellow-300 hover:bg-yellow-400 text-sm px-4 py-1 rounded">🖨️ Print</button>
   </div>
 
   <div class="max-w-full overflow-x-auto">
@@ -40,37 +41,9 @@
     </table>
   </div>
 
-  <div id="shift-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-    <div class="bg-white p-6 rounded shadow w-80">
-      <h3 class="font-semibold mb-4">Assign or Edit Shift</h3>
-      <form id="modal-form">
-        <input type="text" id="modal-role" placeholder="Role (max 10 chars)" maxlength="10" class="w-full mb-2 p-2 border rounded">
-        <input type="text" id="modal-time" placeholder="Time (e.g., 06:00-14:30)" pattern="\d{2}:\d{2}-\d{2}:\d{2}" class="w-full mb-2 p-2 border rounded">
-        <select id="modal-color" class="w-full mb-2 p-2 border rounded">
-          <option value="#60a5fa">Blue</option>
-          <option value="#f87171">Red</option>
-          <option value="#34d399">Green</option>
-          <option value="#fbbf24">Yellow</option>
-          <option value="#a78bfa">Purple</option>
-          <option value="#f472b6">Pink</option>
-          <option value="#6ee7b7">Mint</option>
-          <option value="#fdba74">Orange</option>
-          <option value="#818cf8">Indigo</option>
-          <option value="#facc15">Gold</option>
-        </select>
-        <label class="block mb-2"><input type="checkbox" id="modal-adminOnly" class="mr-1"> Admin Only</label>
-        <div class="flex justify-between mt-4">
-          <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
-          <button type="button" id="delete-button" class="bg-red-500 text-white px-4 py-1 rounded">Delete</button>
-          <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
@@ -85,15 +58,11 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let currentCell = null;
     let currentWeek = 1;
     let weekView = 1;
 
     const tbody = document.getElementById('schedule-body');
     const thead = document.getElementById('table-head');
-    const modal = document.getElementById('shift-modal');
-    const modalForm = document.getElementById('modal-form');
-    const deleteButton = document.getElementById('delete-button');
 
     const schedule = {
       employees: [
@@ -118,7 +87,7 @@
           const date = new Date(base);
           date.setDate(base.getDate() + (w * 7) + d);
           const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
-          labels.push(`W${weekOffset + w + 1}-${days[d]}::${label}`);
+          labels.push(`W${currentWeek + w}-${days[d]}::${label}`);
         }
       }
       return labels;
@@ -150,7 +119,6 @@
           td.className = "schedule-cell";
           td.dataset.row = rowIndex;
           td.dataset.day = day;
-          td.addEventListener('click', () => openModal(td));
           const shift = emp.shifts[day];
           if (shift) {
             td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
@@ -161,62 +129,6 @@
         tbody.appendChild(tr);
       });
     }
-
-    function openModal(cell) {
-      currentCell = cell;
-      const row = cell.dataset.row;
-      const day = cell.dataset.day;
-      const shift = schedule.employees[row].shifts[day];
-      if (shift) {
-        document.getElementById('modal-role').value = shift.label;
-        document.getElementById('modal-time').value = shift.time;
-        document.getElementById('modal-color').value = shift.color;
-        document.getElementById('modal-adminOnly').checked = shift.visibleTo === 'admin';
-      } else {
-        modalForm.reset();
-        document.getElementById('modal-adminOnly').checked = false;
-      }
-      modal.classList.remove('hidden');
-    }
-
-    function closeModal() {
-      modal.classList.add('hidden');
-      modalForm.reset();
-      currentCell = null;
-    }
-
-    modalForm.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const role = document.getElementById('modal-role').value;
-      const time = document.getElementById('modal-time').value;
-      const color = document.getElementById('modal-color').value;
-      const adminOnly = document.getElementById('modal-adminOnly').checked;
-      const row = currentCell.dataset.row;
-      const day = currentCell.dataset.day;
-      const emp = schedule.employees[row];
-      emp.shifts[day] = { label: role, time: time, color: color, visibleTo: adminOnly ? 'admin' : 'all' };
-      await setDoc(doc(db, "shifts", `${emp.name}_${currentWeek}_${day}`), {
-        name: emp.name,
-        day,
-        week: currentWeek,
-        label: role,
-        time,
-        color,
-        visibleTo: adminOnly ? 'admin' : 'all'
-      });
-      closeModal();
-      loadShifts();
-    });
-
-    deleteButton.addEventListener('click', async () => {
-      const row = currentCell.dataset.row;
-      const day = currentCell.dataset.day;
-      const emp = schedule.employees[row];
-      delete emp.shifts[day];
-      await deleteDoc(doc(db, "shifts", `${emp.name}_${currentWeek}_${day}`));
-      closeModal();
-      loadShifts();
-    });
 
     function setWeekView(view) {
       weekView = view;
@@ -245,7 +157,7 @@
               label: data.label,
               time: data.time,
               color: data.color,
-              visibleTo: data.visibleTo
+              visibleTo: data.visibleTo || 'all'
             };
           }
         }
