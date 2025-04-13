@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Schedule</title>
+  <title>Team Schedule (View Only)</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
     .schedule-cell {
@@ -11,7 +11,6 @@
       border: 1px solid #e5e7eb;
       padding: 4px;
       font-size: 0.75rem;
-      cursor: pointer;
     }
     .shift-box {
       border-radius: 0.25rem;
@@ -40,202 +39,130 @@
     </table>
   </div>
 
-  <div id="shift-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-    <div class="bg-white p-6 rounded shadow w-80">
-      <h3 class="font-semibold mb-4">Assign or Edit Shift</h3>
-      <form id="modal-form">
-        <input type="text" id="modal-role" placeholder="Role (max 10 chars)" maxlength="10" class="w-full mb-2 p-2 border rounded">
-        <input type="text" id="modal-time" placeholder="Time (e.g., 06:00-14:30)" pattern="\d{2}:\d{2}-\d{2}:\d{2}" class="w-full mb-2 p-2 border rounded">  
-        <select id="modal-color" class="w-full mb-2 p-2 border rounded">
-          <option value="#60a5fa">Blue</option>
-          <option value="#f87171">Red</option>
-          <option value="#34d399">Green</option>
-          <option value="#fbbf24">Yellow</option>
-          <option value="#a78bfa">Purple</option>
-          <option value="#f472b6">Pink</option>
-          <option value="#6ee7b7">Mint</option>
-          <option value="#fdba74">Orange</option>
-          <option value="#818cf8">Indigo</option>
-          <option value="#facc15">Gold</option>
-        </select>
-        <div class="flex justify-between mt-4">
-          <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
-          <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "YOUR_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_ID",
-  appId: "YOUR_APP_ID"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
+      authDomain: "teamscheduler-a353e.firebaseapp.com",
+      projectId: "teamscheduler-a353e",
+      storageBucket: "teamscheduler-a353e.appspot.com",
+      messagingSenderId: "531731392510",
+      appId: "1:531731392510:web:644e38aeab3e9f505942af",
+      measurementId: "G-EZ342B3QHH"
+    };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-let currentCell = null;
-let currentWeek = 1;
-let weekView = 1;
+    let currentWeek = 1;
+    let weekView = 1;
 
-const tbody = document.getElementById('schedule-body');
-const thead = document.getElementById('table-head');
-const modal = document.getElementById('shift-modal');
-const modalForm = document.getElementById('modal-form');
+    const tbody = document.getElementById('schedule-body');
+    const thead = document.getElementById('table-head');
 
-const schedule = {
-  employees: [
-    "Anna", "Daniel", "Lena", "Tom", "Maya", "Lukas", "Nina", "Tariq",
-    "Eva", "Mark", "Selina", "Chris", "Julie", "Kai", "Ben"
-  ].map(name => ({ name, shifts: {} }))
-};
+    const schedule = {
+      employees: [
+        "Anna", "Daniel", "Lena", "Tom", "Maya", "Lukas", "Nina", "Tariq",
+        "Eva", "Mark", "Selina", "Chris", "Julie", "Kai", "Ben"
+      ].map(name => ({ name, shifts: {} }))
+    };
 
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function getWeekStartDate(weekOffset = 0) {
-  const now = new Date();
-  const start = new Date(now.setDate(now.getDate() - now.getDay() + 1 + (weekOffset * 7)));
-  return start;
-}
-
-function getDateLabels(weekOffset = 0, weekView = 1) {
-  const labels = [];
-  const base = getWeekStartDate(weekOffset);
-  for (let w = 0; w < weekView; w++) {
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(base);
-      date.setDate(base.getDate() + (w * 7) + d);
-      const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
-      labels.push(`W${weekOffset + w + 1}-${days[d]}::${label}`);
+    function getWeekStartDate(weekOffset = 0) {
+      const now = new Date();
+      const start = new Date(now.setDate(now.getDate() - now.getDay() + 1 + (weekOffset * 7)));
+      return start;
     }
-  }
-  return labels;
-}
 
-function renderTableHead(daysWithDates) {
-  const row = document.createElement('tr');
-  row.innerHTML = '<th class="p-2 border">Employee</th>' +
-    daysWithDates.map(d => `<th class="p-2 border">${d.split('::')[1]}</th>`).join('');
-  thead.innerHTML = '';
-  thead.appendChild(row);
-}
-
-function renderSchedule() {
-  const labels = getDateLabels(currentWeek - 1, weekView);
-  const daysWithKeys = labels.map(label => label.split('::')[0]);
-  renderTableHead(labels);
-  tbody.innerHTML = '';
-
-  schedule.employees.forEach((emp, rowIndex) => {
-    const tr = document.createElement('tr');
-    const nameTd = document.createElement('td');
-    nameTd.className = "p-2 border font-medium";
-    nameTd.textContent = emp.name;
-    tr.appendChild(nameTd);
-
-    daysWithKeys.forEach(day => {
-      const td = document.createElement('td');
-      td.className = "schedule-cell";
-      td.dataset.row = rowIndex;
-      td.dataset.day = day;
-      td.addEventListener('click', () => openModal(td));
-      const shift = emp.shifts[day];
-      if (shift) {
-        td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
+    function getDateLabels(weekOffset = 0, weekView = 1) {
+      const labels = [];
+      const base = getWeekStartDate(weekOffset);
+      for (let w = 0; w < weekView; w++) {
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(base);
+          date.setDate(base.getDate() + (w * 7) + d);
+          const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
+          labels.push(`W${weekOffset + w + 1}-${days[d]}::${label}`);
+        }
       }
-      tr.appendChild(td);
-    });
-
-    tbody.appendChild(tr);
-  });
-}
-
-function openModal(cell) {
-  currentCell = cell;
-  const row = cell.dataset.row;
-  const day = cell.dataset.day;
-  const shift = schedule.employees[row].shifts[day];
-  if (shift) {
-    document.getElementById('modal-role').value = shift.label;
-    document.getElementById('modal-time').value = shift.time;
-    document.getElementById('modal-color').value = shift.color;
-  } else {
-    modalForm.reset();
-  }
-  modal.classList.remove('hidden');
-}
-
-function closeModal() {
-  modal.classList.add('hidden');
-  modalForm.reset();
-  currentCell = null;
-}
-
-modalForm.addEventListener('submit', async function (e) {
-  e.preventDefault();
-  const role = document.getElementById('modal-role').value;
-  const time = document.getElementById('modal-time').value;
-  const color = document.getElementById('modal-color').value;
-  const row = currentCell.dataset.row;
-  const day = currentCell.dataset.day;
-  const emp = schedule.employees[row];
-  emp.shifts[day] = { label: role, time: time, color: color };
-  await setDoc(doc(db, "shifts", `${emp.name}_${currentWeek}_${day}`), {
-    name: emp.name,
-    day,
-    week: currentWeek,
-    label: role,
-    time,
-    color
-  });
-  closeModal();
-  renderSchedule();
-});
-
-function setWeekView(view) {
-  weekView = view;
-  renderSchedule();
-}
-
-function changeWeek(direction) {
-  currentWeek += direction;
-  loadShifts();
-}
-
-function goToCurrentWeek() {
-  currentWeek = 1;
-  loadShifts();
-}
-
-async function loadShifts() {
-  const querySnapshot = await getDocs(collection(db, "shifts"));
-  schedule.employees.forEach(e => e.shifts = {});
-  querySnapshot.forEach(docSnap => {
-    const data = docSnap.data();
-    if (data.week === currentWeek) {
-      const emp = schedule.employees.find(e => e.name === data.name);
-      if (emp) {
-        emp.shifts[data.day] = {
-          label: data.label,
-          time: data.time,
-          color: data.color
-        };
-      }
+      return labels;
     }
-  });
-  renderSchedule();
-}
 
-loadShifts();
-</script>
+    function renderTableHead(daysWithDates) {
+      const row = document.createElement('tr');
+      row.innerHTML = '<th class="p-2 border">Employee</th>' +
+        daysWithDates.map(d => `<th class="p-2 border">${d.split('::')[1]}</th>`).join('');
+      thead.innerHTML = '';
+      thead.appendChild(row);
+    }
 
+    function renderSchedule() {
+      const labels = getDateLabels(currentWeek - 1, weekView);
+      const daysWithKeys = labels.map(label => label.split('::')[0]);
+      renderTableHead(labels);
+      tbody.innerHTML = '';
+
+      schedule.employees.forEach((emp, rowIndex) => {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        nameTd.className = "p-2 border font-medium";
+        nameTd.textContent = emp.name;
+        tr.appendChild(nameTd);
+
+        daysWithKeys.forEach(day => {
+          const td = document.createElement('td');
+          td.className = "schedule-cell";
+          td.dataset.row = rowIndex;
+          td.dataset.day = day;
+          const shift = emp.shifts[day];
+          if (shift) {
+            td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
+          }
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function setWeekView(view) {
+      weekView = view;
+      renderSchedule();
+    }
+
+    function changeWeek(direction) {
+      currentWeek += direction;
+      loadShifts();
+    }
+
+    function goToCurrentWeek() {
+      currentWeek = 1;
+      loadShifts();
+    }
+
+    async function loadShifts() {
+      const querySnapshot = await getDocs(collection(db, "shifts"));
+      schedule.employees.forEach(e => e.shifts = {});
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.week === currentWeek) {
+          const emp = schedule.employees.find(e => e.name === data.name);
+          if (emp) {
+            emp.shifts[data.day] = {
+              label: data.label,
+              time: data.time,
+              color: data.color
+            };
+          }
+        }
+      });
+      renderSchedule();
+    }
+
+    loadShifts();
+  </script>
 </body>
 </html>
