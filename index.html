@@ -100,55 +100,40 @@
       ].map(name => ({ name, shifts: {} }))
     };
 
-    const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    function getWeekDays(week) {
-      return week === 2 ? [...allDays.map(d => `W1-${d}`), ...allDays.map(d => `W2-${d}`)] : allDays.map(d => `W${currentWeek}-${d}`);
+    function getWeekStartDate(weekOffset = 0) {
+      const now = new Date();
+      const start = new Date(now.setDate(now.getDate() - now.getDay() + 1 + (weekOffset * 7)));
+      return start;
     }
 
-    async function loadShifts() {
-      const querySnapshot = await getDocs(collection(db, "shifts"));
-      schedule.employees.forEach(e => e.shifts = {});
-      querySnapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.week === currentWeek) {
-          const emp = schedule.employees.find(e => e.name === data.name);
-          if (emp) emp.shifts[`W${data.week}-${data.day}`] = { label: data.label, time: data.time, color: data.color };
+    function getDateLabels(weekOffset = 0, view = 1) {
+      const labels = [];
+      const base = getWeekStartDate(weekOffset);
+      for (let w = 0; w < view; w++) {
+        for (let d = 0; d < 7; d++) {
+          const date = new Date(base);
+          date.setDate(base.getDate() + (w * 7) + d);
+          const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
+          labels.push(`W${w + 1}-${days[d]}::${label}`);
         }
-      });
-      renderSchedule();
+      }
+      return labels;
     }
 
-    async function saveShift(name, week, day, shift) {
-      await setDoc(doc(db, "shifts", `${name}_W${week}_${day}`), {
-        name,
-        day,
-        week,
-        ...shift
-      });
-    }
-
-    async function deleteShift() {
-      const row = currentCell.dataset.row;
-      const fullDay = currentCell.dataset.day;
-      const [weekTag, day] = fullDay.split('-');
-      const emp = schedule.employees[row];
-      delete emp.shifts[fullDay];
-      await deleteDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`));
-      closeModal();
-      renderSchedule();
-    }
-
-    function renderTableHead(days) {
+    function renderTableHead(daysWithDates) {
       const row = document.createElement('tr');
-      row.innerHTML = '<th class="p-2 border">Employee</th>' + days.map(d => `<th class="p-2 border">${d}</th>`).join('');
+      row.innerHTML = '<th class="p-2 border">Employee</th>' +
+        daysWithDates.map(d => `<th class="p-2 border">${d.split('::')[1]}</th>`).join('');
       thead.innerHTML = '';
       thead.appendChild(row);
     }
 
     function renderSchedule() {
-      const days = getWeekDays(weekView);
-      renderTableHead(days);
+      const labels = getDateLabels(currentWeek - 1, weekView);
+      const daysWithKeys = labels.map(label => label.split('::')[0]);
+      renderTableHead(labels);
       tbody.innerHTML = '';
 
       schedule.employees.forEach((emp, rowIndex) => {
@@ -158,14 +143,12 @@
         nameTd.textContent = emp.name;
         tr.appendChild(nameTd);
 
-        days.forEach(day => {
+        daysWithKeys.forEach(day => {
           const td = document.createElement('td');
           td.className = "schedule-cell";
           td.dataset.row = rowIndex;
           td.dataset.day = day;
-
           td.addEventListener('click', () => openModal(td));
-
           const shift = emp.shifts[day];
           if (shift) {
             td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
@@ -209,14 +192,32 @@
 
       const emp = schedule.employees[row];
       emp.shifts[fullDay] = { label: role, time: time, color: color };
-      await saveShift(emp.name, currentWeek, day, emp.shifts[fullDay]);
+      await setDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`), {
+        name: emp.name,
+        day,
+        week: currentWeek,
+        label: role,
+        time,
+        color
+      });
 
       closeModal();
       renderSchedule();
     });
 
-    function setWeekView(weeks) {
-      weekView = weeks;
+    async function deleteShift() {
+      const row = currentCell.dataset.row;
+      const fullDay = currentCell.dataset.day;
+      const [weekTag, day] = fullDay.split('-');
+      const emp = schedule.employees[row];
+      delete emp.shifts[fullDay];
+      await deleteDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`));
+      closeModal();
+      renderSchedule();
+    }
+
+    function setWeekView(view) {
+      weekView = view;
       renderSchedule();
     }
 
@@ -228,6 +229,25 @@
     function goToCurrentWeek() {
       currentWeek = 1;
       loadShifts();
+    }
+
+    async function loadShifts() {
+      const querySnapshot = await getDocs(collection(db, "shifts"));
+      schedule.employees.forEach(e => e.shifts = {});
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.week === currentWeek) {
+          const emp = schedule.employees.find(e => e.name === data.name);
+          if (emp) {
+            emp.shifts[`W${data.week}-${data.day}`] = {
+              label: data.label,
+              time: data.time,
+              color: data.color
+            };
+          }
+        }
+      });
+      renderSchedule();
     }
 
     loadShifts();
