@@ -131,7 +131,7 @@
           td.className = "schedule-cell";
           td.dataset.row = rowIndex;
           td.dataset.day = day;
-          td.addEventListener('click', () => openModal(td));
+          // td.addEventListener('click', () => openModal(td));
           const shift = emp.shifts[day];
           if (shift) {
             td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
