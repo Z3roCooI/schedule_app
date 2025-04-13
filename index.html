@@ -60,30 +60,13 @@
         </select>
         <div class="flex justify-between mt-4">
           <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
-          <button type="button" onclick="deleteShift()" class="bg-red-500 text-white px-4 py-1 rounded">Delete</button>
           <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
         </div>
       </form>
     </div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, deleteDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
-      authDomain: "teamscheduler-a353e.firebaseapp.com",
-      projectId: "teamscheduler-a353e",
-      storageBucket: "teamscheduler-a353e.firebasestorage.app",
-      messagingSenderId: "531731392510",
-      appId: "1:531731392510:web:644e38aeab3e9f505942af",
-      measurementId: "G-EZ342B3QHH"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
+  <script>
     let currentCell = null;
     let currentWeek = 1;
     let weekView = 1;
@@ -108,15 +91,15 @@
       return start;
     }
 
-    function getDateLabels(weekOffset = 0, view = 1) {
+    function getDateLabels(weekOffset = 0, weekView = 1) {
       const labels = [];
       const base = getWeekStartDate(weekOffset);
-      for (let w = 0; w < view; w++) {
+      for (let w = 0; w < weekView; w++) {
         for (let d = 0; d < 7; d++) {
           const date = new Date(base);
           date.setDate(base.getDate() + (w * 7) + d);
           const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
-          labels.push(`W${w + 1}-${days[d]}::${label}`);
+          labels.push(`W${weekOffset + w + 1}-${days[d]}::${label}`);
         }
       }
       return labels;
@@ -181,40 +164,18 @@
       currentCell = null;
     }
 
-    modalForm.addEventListener('submit', async function (e) {
+    modalForm.addEventListener('submit', function (e) {
       e.preventDefault();
       const role = document.getElementById('modal-role').value;
       const time = document.getElementById('modal-time').value;
       const color = document.getElementById('modal-color').value;
       const row = currentCell.dataset.row;
-      const fullDay = currentCell.dataset.day;
-      const [weekTag, day] = fullDay.split('-');
-
+      const day = currentCell.dataset.day;
       const emp = schedule.employees[row];
-      emp.shifts[fullDay] = { label: role, time: time, color: color };
-      await setDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`), {
-        name: emp.name,
-        day,
-        week: currentWeek,
-        label: role,
-        time,
-        color
-      });
-
+      emp.shifts[day] = { label: role, time: time, color: color };
       closeModal();
       renderSchedule();
     });
-
-    async function deleteShift() {
-      const row = currentCell.dataset.row;
-      const fullDay = currentCell.dataset.day;
-      const [weekTag, day] = fullDay.split('-');
-      const emp = schedule.employees[row];
-      delete emp.shifts[fullDay];
-      await deleteDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`));
-      closeModal();
-      renderSchedule();
-    }
 
     function setWeekView(view) {
       weekView = view;
@@ -223,34 +184,16 @@
 
     function changeWeek(direction) {
       currentWeek += direction;
-      loadShifts();
+      renderSchedule();
     }
 
     function goToCurrentWeek() {
       currentWeek = 1;
-      loadShifts();
-    }
-
-    async function loadShifts() {
-      const querySnapshot = await getDocs(collection(db, "shifts"));
-      schedule.employees.forEach(e => e.shifts = {});
-      querySnapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.week === currentWeek) {
-          const emp = schedule.employees.find(e => e.name === data.name);
-          if (emp) {
-            emp.shifts[`W${data.week}-${data.day}`] = {
-              label: data.label,
-              time: data.time,
-              color: data.color
-            };
-          }
-        }
-      });
       renderSchedule();
     }
 
-    loadShifts();
+    // initial render
+    renderSchedule();
   </script>
 </body>
 </html>
