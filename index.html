@@ -57,7 +57,7 @@
     let currentWeek = getWeekNumber(new Date());
     const baseWeek = currentWeek;
 
-    const employees = ["Anna", "Daniel", "Lena", "Tom"];
+    const employees = ["Nina", "Tom", "Anna", "Lena"];
     const schedule = employees.map(name => ({ name, shifts: {} }));
 
     function getWeekNumber(date) {
@@ -67,12 +67,8 @@
     }
 
     function getDates(week) {
-      const year = new Date().getFullYear();
-      const base = new Date(year, 0, (week - 1) * 7);
       const dates = [];
       for (let d = 1; d <= 7; d++) {
-        const date = new Date(base);
-        date.setDate(base.getDate() + d - 1);
         dates.push(`W${week}-D${d}`);
       }
       return dates;
