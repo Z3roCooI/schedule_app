@@ -25,6 +25,18 @@
   </style>
 </head>
 <body class="bg-gray-50 p-4">
+  <div id="auth-section" class="mb-4">
+    <div id="login-form" class="space-y-2">
+      <input type="email" id="email" placeholder="Email" class="border p-2 rounded w-full max-w-xs">
+      <input type="password" id="password" placeholder="Password" class="border p-2 rounded w-full max-w-xs">
+      <button onclick="login()" class="bg-blue-600 text-white px-4 py-1 rounded">Login</button>
+    </div>
+    <div id="user-info" class="hidden space-x-2">
+      <span id="user-email" class="font-semibold"></span>
+      <button onclick="logout()" class="bg-red-500 text-white px-3 py-1 rounded">Logout</button>
+    </div>
+  </div>
+
   <div class="mb-4">
     <button onclick="setWeekView(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded mr-2">1 Week View</button>
     <button onclick="setWeekView(2)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">2 Week View</button>
@@ -63,7 +75,26 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
+      authDomain: "teamscheduler-a353e.firebaseapp.com",
+      projectId: "teamscheduler-a353e",
+      storageBucket: "teamscheduler-a353e.firebasestorage.app",
+      messagingSenderId: "531731392510",
+      appId: "1:531731392510:web:644e38aeab3e9f505942af",
+      measurementId: "G-EZ342B3QHH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth();
+
+    let currentUser = null;
     let weekView = 1;
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const tbody = document.getElementById('schedule-body');
@@ -73,23 +104,30 @@
 
     const schedule = {
       employees: [
-        { name: "Anna", shifts: {} },
-        { name: "Daniel", shifts: {} },
-        { name: "Lena", shifts: {} },
-        { name: "Tom", shifts: {} },
-        { name: "Maya", shifts: {} },
-        { name: "Lukas", shifts: {} },
-        { name: "Nina", shifts: {} },
-        { name: "Tariq", shifts: {} },
-        { name: "Eva", shifts: {} },
-        { name: "Mark", shifts: {} },
-        { name: "Selina", shifts: {} },
-        { name: "Chris", shifts: {} },
-        { name: "Julie", shifts: {} },
-        { name: "Kai", shifts: {} },
-        { name: "Ben", shifts: {} }
-      ]
+        "Anna", "Daniel", "Lena", "Tom", "Maya", "Lukas", "Nina", "Tariq",
+        "Eva", "Mark", "Selina", "Chris", "Julie", "Kai", "Ben"
+      ].map(name => ({ name, shifts: {} }))
     };
+
+    async function loadShifts() {
+      const querySnapshot = await getDocs(collection(db, "shifts"));
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const employee = schedule.employees.find(e => e.name === data.name);
+        if (employee) {
+          employee.shifts[data.day] = { label: data.label, time: data.time, color: data.color };
+        }
+      });
+      renderSchedule();
+    }
+
+    async function saveShift(name, day, shift) {
+      await setDoc(doc(db, "shifts", `${name}_${day}`), {
+        name,
+        day,
+        ...shift
+      });
+    }
 
     function renderSchedule() {
       tbody.innerHTML = '';
@@ -106,7 +144,9 @@
           td.dataset.row = rowIndex;
           td.dataset.day = day;
 
-          td.addEventListener('click', () => openModal(td));
+          if (currentUser) {
+            td.addEventListener('click', () => openModal(td));
+          }
 
           const shift = emp.shifts[day];
           if (shift) {
@@ -130,7 +170,7 @@
       currentCell = null;
     }
 
-    modalForm.addEventListener('submit', function(e) {
+    modalForm.addEventListener('submit', async function(e) {
       e.preventDefault();
       const role = document.getElementById('modal-role').value;
       const time = document.getElementById('modal-time').value;
@@ -138,7 +178,11 @@
       const row = currentCell.dataset.row;
       const day = currentCell.dataset.day;
 
-      schedule.employees[row].shifts[day] = { label: role, time: time, color: color };
+      const employee = schedule.employees[row];
+      employee.shifts[day] = { label: role, time: time, color: color };
+
+      await saveShift(employee.name, day, employee.shifts[day]);
+
       closeModal();
       renderSchedule();
     });
@@ -148,7 +192,45 @@
       renderSchedule();
     }
 
-    renderSchedule();
+    function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      signInWithEmailAndPassword(auth, email, password)
+        .then(userCredential => {
+          currentUser = userCredential.user;
+          document.getElementById('login-form').classList.add('hidden');
+          document.getElementById('user-info').classList.remove('hidden');
+          document.getElementById('user-email').textContent = currentUser.email;
+          renderSchedule();
+        })
+        .catch(error => {
+          alert("Login failed: " + error.message);
+        });
+    }
+
+    function logout() {
+      signOut(auth).then(() => {
+        currentUser = null;
+        document.getElementById('login-form').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+        renderSchedule();
+      });
+    }
+
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+      if (user) {
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('user-info').classList.remove('hidden');
+        document.getElementById('user-email').textContent = user.email;
+      } else {
+        document.getElementById('login-form').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+      }
+      renderSchedule();
+    });
+
+    loadShifts();
   </script>
 </body>
 </html>
