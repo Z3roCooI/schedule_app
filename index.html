@@ -30,6 +30,7 @@
     <button onclick="changeWeek(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">Next Week ▶</button>
     <button onclick="setWeekView(1)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded ml-auto">1 Week View</button>
     <button onclick="setWeekView(2)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded">2 Week View</button>
+    <button onclick="window.print()" class="bg-yellow-300 hover:bg-yellow-400 text-sm px-4 py-1 rounded">🖨️ Print</button>
   </div>
 
   <div class="max-w-full overflow-x-auto">
@@ -85,7 +86,7 @@
           const date = new Date(base);
           date.setDate(base.getDate() + (w * 7) + d);
           const label = `${days[d]}<br><small>${date.toLocaleDateString()}</small>`;
-          labels.push(`W${weekOffset + w + 1}-${days[d]}::${label}`);
+          labels.push(`W${currentWeek + w}-${days[d]}::${label}`);
         }
       }
       return labels;
@@ -118,7 +119,7 @@
           td.dataset.row = rowIndex;
           td.dataset.day = day;
           const shift = emp.shifts[day];
-          if (shift) {
+          if (shift && (!shift.visibleTo || shift.visibleTo === 'all')) {
             td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
           }
           tr.appendChild(td);
@@ -130,7 +131,7 @@
 
     function setWeekView(view) {
       weekView = view;
-      renderSchedule();
+      loadShifts();
     }
 
     function changeWeek(direction) {
@@ -148,13 +149,14 @@
       schedule.employees.forEach(e => e.shifts = {});
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data();
-        if (data.week === currentWeek) {
+        if (data.week === currentWeek && (!data.visibleTo || data.visibleTo === 'all')) {
           const emp = schedule.employees.find(e => e.name === data.name);
           if (emp) {
             emp.shifts[data.day] = {
               label: data.label,
               time: data.time,
-              color: data.color
+              color: data.color,
+              visibleTo: data.visibleTo || 'all'
             };
           }
         }
