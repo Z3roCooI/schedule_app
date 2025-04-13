@@ -11,6 +11,7 @@
       border: 1px solid #e5e7eb;
       padding: 4px;
       font-size: 0.75rem;
+      cursor: pointer;
     }
     .shift-box {
       border-radius: 0.25rem;
@@ -24,31 +25,6 @@
   </style>
 </head>
 <body class="bg-gray-50 p-4">
-  <div class="mb-6">
-    <h2 class="text-lg font-semibold mb-2">Admin: Assign Shifts</h2>
-    <form id="shift-form" class="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white p-4 rounded shadow">
-      <input type="text" id="employee-name" placeholder="Employee Name" class="border p-2 rounded">
-      <select id="day" class="border p-2 rounded">
-        <option value="">Day</option>
-        <option value="Mon">Mon</option>
-        <option value="Tue">Tue</option>
-        <option value="Wed">Wed</option>
-        <option value="Thu">Thu</option>
-        <option value="Fri">Fri</option>
-        <option value="Sat">Sat</option>
-        <option value="Sun">Sun</option>
-      </select>
-      <input type="text" id="role" placeholder="Role (e.g., Crew AM)" class="border p-2 rounded">
-      <input type="text" id="time" placeholder="Time (e.g., 06:00 - 14:30)" class="border p-2 rounded">
-      <input type="color" id="color" class="col-span-2 md:col-span-1 border p-2 rounded">
-      <select id="visibility" class="border p-2 rounded">
-        <option value="all">Visible to all</option>
-        <option value="admin">Visible to admin only</option>
-      </select>
-      <button type="submit" class="bg-blue-600 text-white p-2 rounded">Add Shift</button>
-    </form>
-  </div>
-
   <div class="mb-4">
     <button onclick="setWeekView(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded mr-2">1 Week View</button>
     <button onclick="setWeekView(2)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">2 Week View</button>
@@ -68,31 +44,56 @@
           <th class="p-2 border">Sun</th>
         </tr>
       </thead>
-      <tbody id="schedule-body">
-        <!-- Dynamic rows will go here -->
-      </tbody>
+      <tbody id="schedule-body"></tbody>
     </table>
+  </div>
+
+  <div id="shift-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+    <div class="bg-white p-6 rounded shadow w-80">
+      <h3 class="font-semibold mb-4">Assign Shift</h3>
+      <form id="modal-form">
+        <input type="text" id="modal-role" placeholder="Role (e.g., Crew AM)" class="w-full mb-2 p-2 border rounded">
+        <input type="text" id="modal-time" placeholder="Time (e.g., 06:00 - 14:30)" class="w-full mb-2 p-2 border rounded">
+        <input type="color" id="modal-color" class="w-full mb-2">
+        <div class="flex justify-between mt-4">
+          <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
+          <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script>
     let weekView = 1;
-
-    const roleColors = {
-      'Crew AM': 'bg-blue-500',
-      'CL PM': 'bg-red-500',
-      'OP': 'bg-green-500'
-    };
-
-    const schedule = {
-      employees: Array.from({ length: 15 }, (_, i) => ({ name: `Employee ${i + 1}`, shifts: {} }))
-    };
-
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const tbody = document.getElementById('schedule-body');
+    const modal = document.getElementById('shift-modal');
+    const modalForm = document.getElementById('modal-form');
+    let currentCell = null;
+
+    const schedule = {
+      employees: [
+        { name: "Anna", shifts: {} },
+        { name: "Daniel", shifts: {} },
+        { name: "Lena", shifts: {} },
+        { name: "Tom", shifts: {} },
+        { name: "Maya", shifts: {} },
+        { name: "Lukas", shifts: {} },
+        { name: "Nina", shifts: {} },
+        { name: "Tariq", shifts: {} },
+        { name: "Eva", shifts: {} },
+        { name: "Mark", shifts: {} },
+        { name: "Selina", shifts: {} },
+        { name: "Chris", shifts: {} },
+        { name: "Julie", shifts: {} },
+        { name: "Kai", shifts: {} },
+        { name: "Ben", shifts: {} }
+      ]
+    };
 
     function renderSchedule() {
       tbody.innerHTML = '';
-      schedule.employees.forEach(emp => {
+      schedule.employees.forEach((emp, rowIndex) => {
         const tr = document.createElement('tr');
         const nameTd = document.createElement('td');
         nameTd.className = "p-2 border font-medium";
@@ -102,12 +103,14 @@
         days.forEach(day => {
           const td = document.createElement('td');
           td.className = "schedule-cell";
-          if (emp.shifts[day]) {
-            const shift = emp.shifts[day];
-            if (shift.visibility === 'all' || shift.visibility === undefined) {
-              const color = roleColors[shift.label] || shift.color || 'bg-gray-400';
-              td.innerHTML = `<div class="shift-box ${color}">${shift.label}<br>${shift.time}</div>`;
-            }
+          td.dataset.row = rowIndex;
+          td.dataset.day = day;
+
+          td.addEventListener('click', () => openModal(td));
+
+          const shift = emp.shifts[day];
+          if (shift) {
+            td.innerHTML = `<div class="shift-box" style="background-color: ${shift.color}">${shift.label}<br>${shift.time}</div>`;
           }
           tr.appendChild(td);
         });
@@ -116,33 +119,32 @@
       });
     }
 
-    document.getElementById('shift-form').addEventListener('submit', function (e) {
+    function openModal(cell) {
+      currentCell = cell;
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      modalForm.reset();
+      currentCell = null;
+    }
+
+    modalForm.addEventListener('submit', function(e) {
       e.preventDefault();
-      const name = document.getElementById('employee-name').value;
-      const day = document.getElementById('day').value;
-      const label = document.getElementById('role').value;
-      const time = document.getElementById('time').value;
-      const color = document.getElementById('color').value;
-      const visibility = document.getElementById('visibility').value;
+      const role = document.getElementById('modal-role').value;
+      const time = document.getElementById('modal-time').value;
+      const color = document.getElementById('modal-color').value;
+      const row = currentCell.dataset.row;
+      const day = currentCell.dataset.day;
 
-      let employee = schedule.employees.find(e => e.name === name);
-      if (!employee) {
-        employee = { name, shifts: {} };
-        schedule.employees.push(employee);
-      }
-
-      if (!roleColors[label]) {
-        roleColors[label] = `bg-[${color}]`;
-      }
-
-      employee.shifts[day] = { label, time, color, visibility };
+      schedule.employees[row].shifts[day] = { label: role, time: time, color: color };
+      closeModal();
       renderSchedule();
-      this.reset();
     });
 
     function setWeekView(weeks) {
       weekView = weeks;
-      // Placeholder for future 2-week view extension
       renderSchedule();
     }
 
