@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -25,18 +26,6 @@
   </style>
 </head>
 <body class="bg-gray-50 p-4">
-  <div id="auth-section" class="mb-4">
-    <div id="login-form" class="space-y-2">
-      <input type="email" id="email" placeholder="Email" class="border p-2 rounded w-full max-w-xs">
-      <input type="password" id="password" placeholder="Password" class="border p-2 rounded w-full max-w-xs">
-      <button onclick="login()" class="bg-blue-600 text-white px-4 py-1 rounded">Login</button>
-    </div>
-    <div id="user-info" class="hidden space-x-2">
-      <span id="user-email" class="font-semibold"></span>
-      <button onclick="logout()" class="bg-red-500 text-white px-3 py-1 rounded">Logout</button>
-    </div>
-  </div>
-
   <div class="mb-4">
     <button onclick="setWeekView(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded mr-2">1 Week View</button>
     <button onclick="setWeekView(2)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">2 Week View</button>
@@ -44,18 +33,7 @@
 
   <div class="max-w-full overflow-x-auto">
     <table class="table-auto w-full text-sm text-left border border-gray-300">
-      <thead class="bg-gray-100">
-        <tr>
-          <th class="p-2 border">Employee</th>
-          <th class="p-2 border">Mon</th>
-          <th class="p-2 border">Tue</th>
-          <th class="p-2 border">Wed</th>
-          <th class="p-2 border">Thu</th>
-          <th class="p-2 border">Fri</th>
-          <th class="p-2 border">Sat</th>
-          <th class="p-2 border">Sun</th>
-        </tr>
-      </thead>
+      <thead class="bg-gray-100" id="table-head"></thead>
       <tbody id="schedule-body"></tbody>
     </table>
   </div>
@@ -64,9 +42,20 @@
     <div class="bg-white p-6 rounded shadow w-80">
       <h3 class="font-semibold mb-4">Assign Shift</h3>
       <form id="modal-form">
-        <input type="text" id="modal-role" placeholder="Role (e.g., Crew AM)" class="w-full mb-2 p-2 border rounded">
+        <input type="text" id="modal-role" placeholder="Role (e.g., Crew AM or Vacation)" class="w-full mb-2 p-2 border rounded">
         <input type="text" id="modal-time" placeholder="Time (e.g., 06:00 - 14:30)" class="w-full mb-2 p-2 border rounded">
-        <input type="color" id="modal-color" class="w-full mb-2">
+        <select id="modal-color" class="w-full mb-2 p-2 border rounded">
+          <option value="#60a5fa">Blue</option>
+          <option value="#f87171">Red</option>
+          <option value="#34d399">Green</option>
+          <option value="#fbbf24">Yellow</option>
+          <option value="#a78bfa">Purple</option>
+          <option value="#f472b6">Pink</option>
+          <option value="#6ee7b7">Mint</option>
+          <option value="#fdba74">Orange</option>
+          <option value="#818cf8">Indigo</option>
+          <option value="#facc15">Gold</option>
+        </select>
         <div class="flex justify-between mt-4">
           <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
           <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
@@ -78,7 +67,6 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
     import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
@@ -92,15 +80,16 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const auth = getAuth();
 
-    let currentUser = null;
+    let currentUser = true; // Assume app owner is editing
+    let currentCell = null;
     let weekView = 1;
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let currentWeek = 1;
+
     const tbody = document.getElementById('schedule-body');
+    const thead = document.getElementById('table-head');
     const modal = document.getElementById('shift-modal');
     const modalForm = document.getElementById('modal-form');
-    let currentCell = null;
 
     const schedule = {
       employees: [
@@ -109,27 +98,46 @@
       ].map(name => ({ name, shifts: {} }))
     };
 
+    const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    function getWeekDays(week) {
+      return week === 2 ? [...allDays, ...allDays] : allDays;
+    }
+
     async function loadShifts() {
       const querySnapshot = await getDocs(collection(db, "shifts"));
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data();
-        const employee = schedule.employees.find(e => e.name === data.name);
-        if (employee) {
-          employee.shifts[data.day] = { label: data.label, time: data.time, color: data.color };
+        if (data.week === currentWeek) {
+          const employee = schedule.employees.find(e => e.name === data.name);
+          if (employee) {
+            employee.shifts[data.day] = { label: data.label, time: data.time, color: data.color };
+          }
         }
       });
       renderSchedule();
     }
 
     async function saveShift(name, day, shift) {
-      await setDoc(doc(db, "shifts", `${name}_${day}`), {
+      await setDoc(doc(db, "shifts", `${name}_W${currentWeek}_${day}`), {
         name,
         day,
+        week: currentWeek,
         ...shift
       });
     }
 
+    function renderTableHead(days) {
+      const row = document.createElement('tr');
+      row.innerHTML = '<th class="p-2 border">Employee</th>' +
+        days.map(d => `<th class="p-2 border">${d}</th>`).join('');
+      thead.innerHTML = '';
+      thead.appendChild(row);
+    }
+
     function renderSchedule() {
+      const days = getWeekDays(weekView);
+      renderTableHead(days);
       tbody.innerHTML = '';
       schedule.employees.forEach((emp, rowIndex) => {
         const tr = document.createElement('tr');
@@ -191,44 +199,6 @@
       weekView = weeks;
       renderSchedule();
     }
-
-    function login() {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      signInWithEmailAndPassword(auth, email, password)
-        .then(userCredential => {
-          currentUser = userCredential.user;
-          document.getElementById('login-form').classList.add('hidden');
-          document.getElementById('user-info').classList.remove('hidden');
-          document.getElementById('user-email').textContent = currentUser.email;
-          renderSchedule();
-        })
-        .catch(error => {
-          alert("Login failed: " + error.message);
-        });
-    }
-
-    function logout() {
-      signOut(auth).then(() => {
-        currentUser = null;
-        document.getElementById('login-form').classList.remove('hidden');
-        document.getElementById('user-info').classList.add('hidden');
-        renderSchedule();
-      });
-    }
-
-    onAuthStateChanged(auth, user => {
-      currentUser = user;
-      if (user) {
-        document.getElementById('login-form').classList.add('hidden');
-        document.getElementById('user-info').classList.remove('hidden');
-        document.getElementById('user-email').textContent = user.email;
-      } else {
-        document.getElementById('login-form').classList.remove('hidden');
-        document.getElementById('user-info').classList.add('hidden');
-      }
-      renderSchedule();
-    });
 
     loadShifts();
   </script>
