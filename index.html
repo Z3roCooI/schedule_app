@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
->
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Team Schedule</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
@@ -26,9 +25,12 @@
   </style>
 </head>
 <body class="bg-gray-50 p-4">
-  <div class="mb-4">
-    <button onclick="setWeekView(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded mr-2">1 Week View</button>
-    <button onclick="setWeekView(2)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">2 Week View</button>
+  <div class="mb-4 flex items-center gap-2">
+    <button onclick="changeWeek(-1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">◀ Prev Week</button>
+    <button onclick="goToCurrentWeek()" class="bg-blue-300 hover:bg-blue-400 text-sm px-4 py-1 rounded">This Week</button>
+    <button onclick="changeWeek(1)" class="bg-gray-300 hover:bg-gray-400 text-sm px-4 py-1 rounded">Next Week ▶</button>
+    <button onclick="setWeekView(1)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded ml-auto">1 Week View</button>
+    <button onclick="setWeekView(2)" class="bg-green-200 hover:bg-green-300 text-sm px-4 py-1 rounded">2 Week View</button>
   </div>
 
   <div class="max-w-full overflow-x-auto">
@@ -40,7 +42,7 @@
 
   <div id="shift-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
     <div class="bg-white p-6 rounded shadow w-80">
-      <h3 class="font-semibold mb-4">Assign Shift</h3>
+      <h3 class="font-semibold mb-4">Assign or Edit Shift</h3>
       <form id="modal-form">
         <input type="text" id="modal-role" placeholder="Role (e.g., Crew AM or Vacation)" class="w-full mb-2 p-2 border rounded">
         <input type="text" id="modal-time" placeholder="Time (e.g., 06:00 - 14:30)" class="w-full mb-2 p-2 border rounded">
@@ -58,6 +60,7 @@
         </select>
         <div class="flex justify-between mt-4">
           <button type="submit" class="bg-blue-600 text-white px-4 py-1 rounded">Save</button>
+          <button type="button" onclick="deleteShift()" class="bg-red-500 text-white px-4 py-1 rounded">Delete</button>
           <button type="button" onclick="closeModal()" class="text-gray-600">Cancel</button>
         </div>
       </form>
@@ -66,7 +69,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAbiLAmiMFikMbCC5yDaykdQLTYN9fq-PY",
@@ -81,10 +84,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let currentUser = true; // Assume app owner is editing
     let currentCell = null;
-    let weekView = 1;
     let currentWeek = 1;
+    let weekView = 1;
 
     const tbody = document.getElementById('schedule-body');
     const thead = document.getElementById('table-head');
@@ -101,36 +103,45 @@
     const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     function getWeekDays(week) {
-      return week === 2 ? [...allDays, ...allDays] : allDays;
+      return week === 2 ? [...allDays.map(d => `W1-${d}`), ...allDays.map(d => `W2-${d}`)] : allDays.map(d => `W${currentWeek}-${d}`);
     }
 
     async function loadShifts() {
       const querySnapshot = await getDocs(collection(db, "shifts"));
+      schedule.employees.forEach(e => e.shifts = {});
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data();
         if (data.week === currentWeek) {
-          const employee = schedule.employees.find(e => e.name === data.name);
-          if (employee) {
-            employee.shifts[data.day] = { label: data.label, time: data.time, color: data.color };
-          }
+          const emp = schedule.employees.find(e => e.name === data.name);
+          if (emp) emp.shifts[`W${data.week}-${data.day}`] = { label: data.label, time: data.time, color: data.color };
         }
       });
       renderSchedule();
     }
 
-    async function saveShift(name, day, shift) {
-      await setDoc(doc(db, "shifts", `${name}_W${currentWeek}_${day}`), {
+    async function saveShift(name, week, day, shift) {
+      await setDoc(doc(db, "shifts", `${name}_W${week}_${day}`), {
         name,
         day,
-        week: currentWeek,
+        week,
         ...shift
       });
     }
 
+    async function deleteShift() {
+      const row = currentCell.dataset.row;
+      const fullDay = currentCell.dataset.day;
+      const [weekTag, day] = fullDay.split('-');
+      const emp = schedule.employees[row];
+      delete emp.shifts[fullDay];
+      await deleteDoc(doc(db, "shifts", `${emp.name}_${weekTag}_${day}`));
+      closeModal();
+      renderSchedule();
+    }
+
     function renderTableHead(days) {
       const row = document.createElement('tr');
-      row.innerHTML = '<th class="p-2 border">Employee</th>' +
-        days.map(d => `<th class="p-2 border">${d}</th>`).join('');
+      row.innerHTML = '<th class="p-2 border">Employee</th>' + days.map(d => `<th class="p-2 border">${d}</th>`).join('');
       thead.innerHTML = '';
       thead.appendChild(row);
     }
@@ -139,6 +150,7 @@
       const days = getWeekDays(weekView);
       renderTableHead(days);
       tbody.innerHTML = '';
+
       schedule.employees.forEach((emp, rowIndex) => {
         const tr = document.createElement('tr');
         const nameTd = document.createElement('td');
@@ -152,9 +164,7 @@
           td.dataset.row = rowIndex;
           td.dataset.day = day;
 
-          if (currentUser) {
-            td.addEventListener('click', () => openModal(td));
-          }
+          td.addEventListener('click', () => openModal(td));
 
           const shift = emp.shifts[day];
           if (shift) {
@@ -169,6 +179,16 @@
 
     function openModal(cell) {
       currentCell = cell;
+      const row = cell.dataset.row;
+      const day = cell.dataset.day;
+      const shift = schedule.employees[row].shifts[day];
+      if (shift) {
+        document.getElementById('modal-role').value = shift.label;
+        document.getElementById('modal-time').value = shift.time;
+        document.getElementById('modal-color').value = shift.color;
+      } else {
+        modalForm.reset();
+      }
       modal.classList.remove('hidden');
     }
 
@@ -178,18 +198,18 @@
       currentCell = null;
     }
 
-    modalForm.addEventListener('submit', async function(e) {
+    modalForm.addEventListener('submit', async function (e) {
       e.preventDefault();
       const role = document.getElementById('modal-role').value;
       const time = document.getElementById('modal-time').value;
       const color = document.getElementById('modal-color').value;
       const row = currentCell.dataset.row;
-      const day = currentCell.dataset.day;
+      const fullDay = currentCell.dataset.day;
+      const [weekTag, day] = fullDay.split('-');
 
-      const employee = schedule.employees[row];
-      employee.shifts[day] = { label: role, time: time, color: color };
-
-      await saveShift(employee.name, day, employee.shifts[day]);
+      const emp = schedule.employees[row];
+      emp.shifts[fullDay] = { label: role, time: time, color: color };
+      await saveShift(emp.name, currentWeek, day, emp.shifts[fullDay]);
 
       closeModal();
       renderSchedule();
@@ -198,6 +218,16 @@
     function setWeekView(weeks) {
       weekView = weeks;
       renderSchedule();
+    }
+
+    function changeWeek(direction) {
+      currentWeek += direction;
+      loadShifts();
+    }
+
+    function goToCurrentWeek() {
+      currentWeek = 1;
+      loadShifts();
     }
 
     loadShifts();
